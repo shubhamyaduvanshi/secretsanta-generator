@@ -48,7 +48,7 @@ This project uses an in-memory database (H2). If you would like to work on the p
 ```spring.h2.console.enabled=true```
 
 in __application.properties__.
-
+ 
 The database url used is `jdbc:h2:mem:testdb`.
 ## About
 
