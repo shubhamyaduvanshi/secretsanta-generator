@@ -1,0 +1,87 @@
+pipeline {
+    agent {label 'slave-1'}
+    tools {
+        maven 'maven3'
+        jdk 'jdk17'
+    }
+    environment {
+        SCANNER_HOME=tool 'sonar-scanner'
+    }
+    
+    stages {
+        // stage('Git Checkout') {
+        //     steps {
+        //         git 'https://github.com/shubhamyaduvanshi/secretsanta-generator.git'
+        //     }
+        // }
+        stage('Compile') {
+            steps {
+                sh "mvn compile"
+            }
+        }
+        stage('Tests') {
+            steps {
+                sh "mvn test" 
+            }
+        }
+        stage('Sonarqube Analysis') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=santa \
+                     -Dsonar.projectKey=santa -Dsonar.java.binaries=. '''
+                }
+            }
+        }
+        stage('Owasp Scan') {
+            steps {
+                dependencyCheck additionalArguments: ' --scan . ', odcInstallation: 'DC'
+                 dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+        stage('Build Application') {
+            steps {
+                sh "mvn package" 
+            }
+        }
+        stage('tag and Push Docker Images') {
+            steps {
+                script{
+                    withDockerRegistry(credentialsId: 'dockerhub-cred', toolName: 'docker-1')
+                    {
+                        sh "docker pull adijaiswal/santa:latest"
+                        sh "docker tag adijaiswal/santa:latest 8052755876/santa:latest"
+                        sh "docker push 8052755876/santa:latest"
+                    }
+                }
+            }
+        }
+        stage('Deploy Docker Applications') {
+            steps {
+                script{
+                    withDockerRegistry(credentialsId: 'dockerhub-cred', toolName: 'docker-1')
+                    {
+                        sh "docker run -d -p 8080:8080 8052755876/santa:latest"
+                    }
+                } 
+            }
+        }
+    }
+    post{
+            always{
+                emailext (
+                    subject: "Pipeline Status : ${BUILD_NUMBER}",
+                    body: ''' <html>
+                                <body>
+                                  <p> Build Status: ${BUILD_STATUS} </p>
+                                  <p> Build Number: ${BUILD_NUMBER} </p>
+                                  <p> check the <a href = "${BUILD_URL}"> console output </a> . </p>
+                                </body>
+                               </html> ''',
+                    to: 'shubham05071998@gmail.com',
+                    from: 'jenkins@example.com',
+                    replyTo: 'jenkins@example.com',
+                    mimeType: 'text/html'
+                    )
+            }
+        }
+}
